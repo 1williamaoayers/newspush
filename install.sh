@@ -105,7 +105,7 @@ cat > docker-compose.yml << EOF
 version: '3'
 services:
   api:
-    image: vikiboss/60s:latest
+    image: ghcr.io/vikiboss/60s:latest
     container_name: newspush-api
     restart: always
     ports:

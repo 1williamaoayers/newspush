@@ -31,21 +31,6 @@ fi
 # 1. 基础环境检查与安装
 echo -e "${BLUE}[1/5] 检查环境...${NC}"
 
-# 检查 Docker
-if ! command -v docker &> /dev/null; then
-    echo -e "${YELLOW}未检测到 Docker，正在为您自动安装...${NC}"
-    curl -fsSL https://get.docker.com | bash -s docker --mirror Aliyun
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}Docker 安装失败，请检查网络或手动安装 Docker 后重试。${NC}"
-        exit 1
-    fi
-    systemctl enable docker
-    systemctl start docker
-    echo -e "${GREEN}Docker 安装完成！${NC}"
-else
-    echo -e "${GREEN}Docker 已安装，跳过。${NC}"
-fi
-
 # 检查 jq (用于处理 JSON)
 if ! command -v jq &> /dev/null; then
     echo -e "正在安装必要工具 jq..."
@@ -271,23 +256,10 @@ echo -e "${GREEN}配置文件已生成！${NC}"
 # 4. 启动服务
 echo -e "${BLUE}[4/5] 启动服务容器...${NC}"
 
-# 检查 docker-compose 命令
-if docker compose version &> /dev/null; then
-    DOCKER_COMPOSE_CMD="docker compose"
-elif command -v docker-compose &> /dev/null; then
-    DOCKER_COMPOSE_CMD="docker-compose"
-else
-    echo -e "${RED}未找到 docker-compose，尝试安装插件...${NC}"
-    # 简易安装 docker compose plugin
-    mkdir -p /usr/libexec/docker/cli-plugins
-    curl -SL https://pull.aitgo.netlib.re/https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-linux-$(uname -m) -o /usr/libexec/docker/cli-plugins/docker-compose
-    chmod +x /usr/libexec/docker/cli-plugins/docker-compose
-    DOCKER_COMPOSE_CMD="docker compose"
-fi
-
-$DOCKER_COMPOSE_CMD up -d
+# 直接使用 docker compose (V2)
+docker compose up -d
 if [ $? -ne 0 ]; then
-    echo -e "${RED}服务启动失败！请检查 Docker 日志。${NC}"
+    echo -e "${RED}服务启动失败！请检查 Docker 日志或确保已安装 docker compose 插件。${NC}"
     exit 1
 fi
 

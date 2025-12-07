@@ -275,7 +275,7 @@ else
     echo -e "${RED}未找到 docker-compose，尝试安装插件...${NC}"
     # 简易安装 docker compose plugin
     mkdir -p /usr/libexec/docker/cli-plugins
-    curl -SL https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-linux-$(uname -m) -o /usr/libexec/docker/cli-plugins/docker-compose
+    curl -SL https://pull.aitgo.netlib.re/https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-linux-$(uname -m) -o /usr/libexec/docker/cli-plugins/docker-compose
     chmod +x /usr/libexec/docker/cli-plugins/docker-compose
     DOCKER_COMPOSE_CMD="docker compose"
 fi

@@ -66,6 +66,39 @@ if [ -z "$INSTALL_DIR" ]; then
 fi
 echo -e "${GREEN}将在 ${INSTALL_DIR} 部署服务${NC}"
 
+# 交互式选择是否使用国内镜像加速
+echo ""
+echo -e "由于 GitHub 容器服务 (GHCR) 在国内访问可能较慢，建议开启镜像加速。"
+read -p "是否在中国大陆使用？(y/n) (默认: n): " USE_MIRROR
+
+if [[ "$USE_MIRROR" =~ ^[Yy]$ ]]; then
+    echo ""
+    echo -e "请选择加速源："
+    echo -e "1. 南京大学 (ghcr.nju.edu.cn) - ${GREEN}推荐，公网可用${NC}"
+    echo -e "2. 自定义 (手动输入其他镜像地址)"
+    read -p "请输入选项 [1-2] (默认: 1): " MIRROR_CHOICE
+    
+    if [ "$MIRROR_CHOICE" == "2" ]; then
+        echo -e "${YELLOW}提示：请输入完整的镜像地址（包含 Registry 域名、镜像名和标签）${NC}"
+        echo -e "示例 1 (DockerProxy): ghcr.dockerproxy.com/1williamaoayers/newspush:latest"
+        echo -e "示例 2 (DaoCloud): ghcr.daocloud.io/1williamaoayers/newspush:latest"
+        echo -e "示例 3 (私有仓库): registry.example.com/my-repo/newspush:latest"
+        echo ""
+        read -p "请输入完整镜像地址: " CUSTOM_IMAGE
+        if [ -n "$CUSTOM_IMAGE" ]; then
+            IMAGE_NAME="$CUSTOM_IMAGE"
+        else
+            echo -e "${YELLOW}未输入地址，将使用南京大学镜像${NC}"
+            IMAGE_NAME="ghcr.nju.edu.cn/1williamaoayers/newspush:latest"
+        fi
+    else
+        IMAGE_NAME="ghcr.nju.edu.cn/1williamaoayers/newspush:latest"
+    fi
+    echo -e "${GREEN}已选择镜像：${IMAGE_NAME}${NC}"
+else
+    IMAGE_NAME="ghcr.io/1williamaoayers/newspush:latest"
+fi
+
 # 交互式获取推送时间
 echo ""
 echo -e "您希望每天几点推送新闻？(24小时制)"
@@ -225,7 +258,7 @@ docker run -d \
     --name newspush-api \
     --network newspush-network \
     --restart unless-stopped \
-    ghcr.io/1williamaoayers/newspush:latest
+    "$IMAGE_NAME"
 
 # 启动推送服务 (作为常驻容器，用于执行定时任务)
 echo -e "正在启动推送服务..."
@@ -237,7 +270,7 @@ docker run -d \
     -e FEISHU_WEBHOOK_URL="$FEISHU_WEBHOOK" \
     -e SOURCE_URL="http://newspush-api:4399" \
     --entrypoint tail \
-    ghcr.io/1williamaoayers/newspush:latest \
+    "$IMAGE_NAME" \
     -f /dev/null
 
 if [ $? -ne 0 ]; then

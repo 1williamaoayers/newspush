@@ -256,10 +256,21 @@ echo -e "${GREEN}配置文件已生成！${NC}"
 # 4. 启动服务
 echo -e "${BLUE}[4/5] 启动服务容器...${NC}"
 
-# 直接使用 docker compose (V2)
-docker compose up -d
+# 尝试启动服务
+# 优先尝试 docker compose (V2)
+if docker compose version &> /dev/null; then
+    docker compose up -d
+# 其次尝试 docker-compose (V1)
+elif command -v docker-compose &> /dev/null; then
+    docker-compose up -d
+else
+    echo -e "${RED}未找到 docker compose 或 docker-compose 命令！${NC}"
+    echo -e "${YELLOW}请确保您已正确安装 Docker 和 Docker Compose。${NC}"
+    exit 1
+fi
+
 if [ $? -ne 0 ]; then
-    echo -e "${RED}服务启动失败！请检查 Docker 日志或确保已安装 docker compose 插件。${NC}"
+    echo -e "${RED}服务启动失败！请检查 Docker 日志。${NC}"
     exit 1
 fi
 

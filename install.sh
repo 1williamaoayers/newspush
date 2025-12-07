@@ -124,7 +124,7 @@ cd "$INSTALL_DIR" || exit
 # 写入推送脚本逻辑
 mkdir -p scripts
 
-cat > scripts/push.js << 'EOF'
+cat > scripts/push.cjs << 'EOF'
 const http = require('http');
 const https = require('https');
 const url = require('url');
@@ -287,7 +287,7 @@ echo -e "${BLUE}[5/5] 设置定时任务...${NC}"
 cat > push_now.sh << EOF
 #!/bin/bash
 echo "正在触发推送..."
-docker exec newspush-pusher node /app/scripts/push.js
+docker exec newspush-pusher node /app/scripts/push.cjs
 EOF
 chmod +x push_now.sh
 
@@ -311,7 +311,7 @@ echo -e "2. 查看运行日志："
 echo -e "   ${YELLOW}docker logs newspush-api${NC}"
 echo -e ""
 echo -e "3. 修改配置："
-echo -e "   编辑 ${INSTALL_DIR}/docker-compose.yml 文件，然后执行 docker compose up -d 重启"
+echo -e "   重新运行此安装脚本即可修改配置"
 echo -e "${BLUE}=============================================================${NC}"
 echo ""
 

@@ -19,7 +19,7 @@
 请使用 `root` 用户登录您的服务器，然后执行以下命令：
 
 ```bash
-curl -O https://pull.aitgo.netlib.re/https://raw.githubusercontent.com/vikiboss/60s/master/install.sh && sudo bash install.sh
+curl -O https://pull.aitgo.netlib.re/https://raw.githubusercontent.com/1williamaoayers/newspush/master/install.sh && sudo bash install.sh
 ```
 
 *(如果无法下载，请将 `install.sh` 的内容复制到您的服务器上保存为 `install.sh`，然后运行 `bash install.sh`)*

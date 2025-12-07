@@ -81,4 +81,4 @@ A: **完美支持！** 本项目专门针对玩客云（ARM32）进行了优化�
 ---
 
 ## 🙏 鸣谢
-本项目基于 [60s-api](https://github.com/vikiboss/60s) 开发。
+本项目基于 [60s-api](https://github.com/vikiboss/60s) 开发 。

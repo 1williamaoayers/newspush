@@ -84,11 +84,16 @@ echo -e "${GREEN}将在 ${INSTALL_DIR} 部署服务${NC}"
 # 交互式获取推送时间
 echo ""
 echo -e "您希望每天几点推送新闻？(24小时制)"
-read -p "请输入小时 (0-23, 默认: 8): " PUSH_HOUR
-if [ -z "$PUSH_HOUR" ]; then
-    PUSH_HOUR="8"
+echo -e "如果想设置多个时间点，请用逗号分隔 (例如: 8,12,18 代表早8点、午12点、晚6点)"
+read -p "请输入小时 (默认: 8): " PUSH_HOUR_INPUT
+if [ -z "$PUSH_HOUR_INPUT" ]; then
+    PUSH_HOUR_INPUT="8"
 fi
-echo -e "${GREEN}将在每天 ${PUSH_HOUR}:00 准时为您推送${NC}"
+
+# 格式化 crontab 时间
+# 将中文逗号替换为英文逗号，去除空格
+CRON_HOURS=$(echo "$PUSH_HOUR_INPUT" | sed 's/，/,/g' | tr -d ' ')
+echo -e "${GREEN}将在每天 ${CRON_HOURS} 点准时为您推送${NC}"
 
 echo ""
 echo -e "${BLUE}[3/5] 开始部署服务...${NC}"
@@ -304,9 +309,9 @@ chmod +x push_now.sh
 crontab -l | grep -v "$INSTALL_DIR/push_now.sh" | crontab -
 
 # 添加新任务
-(crontab -l 2>/dev/null; echo "0 $PUSH_HOUR * * * $INSTALL_DIR/push_now.sh >> $INSTALL_DIR/push.log 2>&1") | crontab -
+(crontab -l 2>/dev/null; echo "0 $CRON_HOURS * * * $INSTALL_DIR/push_now.sh >> $INSTALL_DIR/push.log 2>&1") | crontab -
 
-echo -e "${GREEN}定时任务已设置：每天 ${PUSH_HOUR}:00 自动执行${NC}"
+echo -e "${GREEN}定时任务已设置：每天 ${CRON_HOURS} 点自动执行${NC}"
 echo ""
 echo -e "${BLUE}=============================================================${NC}"
 echo -e "${GREEN}🎉 恭喜！部署已完成！${NC}"

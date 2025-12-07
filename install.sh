@@ -88,46 +88,7 @@ mkdir -p "$INSTALL_DIR"
 cd "$INSTALL_DIR" || exit
 
 # 下载必要文件 (这里模拟下载，实际应该从 GitHub 拉取或直接写入)
-# 为了演示方便，我们直接写入 docker-compose.yml 和推送脚本
-
-# 写入 docker-compose.yml
-cat > docker-compose.yml << EOF
-version: '3'
-services:
-  api:
-    image: ghcr.io/1williamaoayers/newspush:latest
-    container_name: newspush-api
-    restart: always
-    ports:
-      - "4399:4399"
-    environment:
-      - TZ=Asia/Shanghai
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  pusher:
-    image: node:lts-alpine
-    container_name: newspush-pusher
-    working_dir: /app
-    volumes:
-      - ./scripts:/app/scripts
-      - ./package.json:/app/package.json
-    command: crond -f
-    environment:
-      - TZ=Asia/Shanghai
-      - SOURCE_URL=http://api:4399
-      - FEISHU_WEBHOOK_URL=${FEISHU_WEBHOOK}
-    depends_on:
-      - api
-EOF
-
-# 写入推送脚本逻辑 (复用之前的 TypeScript 脚本逻辑，这里简化为 curl 版本以减少依赖，或者使用 node 容器运行 TS)
-# 考虑到小白用户，使用 Node.js 容器运行我们在项目中写的 scripts/news-push.ts 是最稳妥的
-# 但为了不依赖源码，我们这里生成一个独立的 JS 推送脚本
-
+# 写入推送脚本逻辑
 mkdir -p scripts
 
 cat > scripts/push.js << 'EOF'
@@ -248,26 +209,36 @@ async function main() {
 main();
 EOF
 
-# 生成 package.json 供 node 容器使用 (虽然只有原生模块，但保持规范)
-echo '{}' > package.json
-
-echo -e "${GREEN}配置文件已生成！${NC}"
-
 # 4. 启动服务
 echo -e "${BLUE}[4/5] 启动服务容器...${NC}"
 
-# 尝试启动服务
-# 优先尝试 docker compose (V2)
-if docker compose version &> /dev/null; then
-    docker compose up -d
-# 其次尝试 docker-compose (V1)
-elif command -v docker-compose &> /dev/null; then
-    docker-compose up -d
-else
-    echo -e "${RED}未找到 docker compose 或 docker-compose 命令！${NC}"
-    echo -e "${YELLOW}请确保您已正确安装 Docker 和 Docker Compose。${NC}"
-    exit 1
-fi
+# 创建专用网络
+docker network create newspush-network 2>/dev/null || true
+
+# 清理旧容器
+echo -e "正在清理旧容器..."
+docker rm -f newspush-api newspush-pusher 2>/dev/null || true
+
+# 启动 API 服务
+echo -e "正在启动 API 服务..."
+docker run -d \
+    --name newspush-api \
+    --network newspush-network \
+    --restart unless-stopped \
+    ghcr.io/1williamaoayers/newspush:latest
+
+# 启动推送服务 (作为常驻容器，用于执行定时任务)
+echo -e "正在启动推送服务..."
+docker run -d \
+    --name newspush-pusher \
+    --network newspush-network \
+    --restart unless-stopped \
+    -v "$INSTALL_DIR/scripts:/app/scripts" \
+    -e FEISHU_WEBHOOK_URL="$FEISHU_WEBHOOK" \
+    -e SOURCE_URL="http://newspush-api:4399" \
+    --entrypoint tail \
+    ghcr.io/1williamaoayers/newspush:latest \
+    -f /dev/null
 
 if [ $? -ne 0 ]; then
     echo -e "${RED}服务启动失败！请检查 Docker 日志。${NC}"

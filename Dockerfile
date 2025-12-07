@@ -10,6 +10,9 @@ ENV NODE_ENV=production
 # 复制项目依赖文件，这里优化了复制步骤，可以利用 Docker 缓存
 COPY package.json pnpm-lock.yaml* ./
 
+# 适配 ARM32 (玩客云等): 安装构建工具以支持可能需要的本地编译
+RUN apk add --no-cache python3 make g++
+
 # 启用 corepack 并预先下载 pnpm 包管理器，减少运行时下载延迟
 # 安装项目依赖，使用 --frozen-lockfile 参数确保锁文件的准确性
 RUN corepack enable && corepack prepare --activate && pnpm install --prod --frozen-lockfile
@@ -30,12 +33,9 @@ WORKDIR /app
 # 设置 node 环境变量为生产环境，更高效地运行应用，设置时区为上海
 ENV NODE_ENV=production TZ=Asia/Shanghai
 
-# 安装 curl 用于健康检查，改进安全性，创建一个运行用户，避免以 root 用户运行
-# RUN apk add --no-cache curl && \
-#   addgroup -S nodejs && adduser -S nodejs -G nodejs
-
-# 创建一个运行用户，避免以 root 用户运行
-RUN addgroup -S nodejs && adduser -S nodejs -G nodejs
+# 安装 tzdata 以支持时区设置，创建非 root 用户
+RUN apk add --no-cache tzdata && \
+    addgroup -S nodejs && adduser -S nodejs -G nodejs
 
 # 从构建阶段复制整个 app 目录
 COPY --from=builder /app .

@@ -1,0 +1,661 @@
+# 创建完整的新闻推送系统
+# 清理并重新创建目录
+rm -rf /home/60s
+mkdir -p /home/60s
+
+# 配置变量
+SOURCE_URL="http://192.168.3.133:4399/v2/60s"
+FEISHU_WEBHOOK_URL="https://www.feishu.cn/flow/api/trigger-webhook/e9eb3eb901b500ab55b2f44c50194268"
+
+# 创建配置文件
+cat > /home/60s/config.conf << EOF
+SOURCE_URL="$SOURCE_URL"
+FEISHU_WEBHOOK_URL="$FEISHU_WEBHOOK_URL"
+EOF
+
+# 创建推送脚本
+cat > /home/60s/news_pusher.sh << 'EOF'
+#!/bin/bash
+
+# 从配置文件加载变量
+source /home/60s/config.conf
+
+LOG_FILE="/home/60s/daily_news_push.log"
+
+# 记录日志函数
+log_message() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> $LOG_FILE
+}
+
+# 获取60秒新闻数据
+fetch_60s_news() {
+    local response
+    response=$(curl -s -m 30 "http://192.168.3.133:4399/v2/60s")
+    if [ $? -ne 0 ]; then
+        log_message "ERROR: 获取60秒新闻数据失败"
+        return 1
+    fi
+    
+    # 检查返回的JSON是否有效
+    if echo "$response" | jq -e .code >/dev/null 2>&1; then
+        echo "$response"
+        return 0
+    else
+        log_message "ERROR: 60秒新闻返回数据不是有效的JSON格式"
+        return 1
+    fi
+}
+
+# 获取百度热点数据
+fetch_baidu_hot() {
+    local response
+    response=$(curl -s -m 30 "http://192.168.3.133:4399/v2/baidu/hot")
+    if [ $? -ne 0 ]; then
+        log_message "ERROR: 获取百度热点数据失败"
+        return 1
+    fi
+    
+    # 检查返回的JSON是否有效
+    if echo "$response" | jq -e .code >/dev/null 2>&1; then
+        echo "$response"
+        return 0
+    else
+        log_message "ERROR: 百度热点返回数据不是有效的JSON格式"
+        return 1
+    fi
+}
+
+# 获取头条热点数据
+fetch_toutiao_hot() {
+    local response
+    response=$(curl -s -m 30 "http://192.168.3.133:4399/v2/toutiao")
+    if [ $? -ne 0 ]; then
+        log_message "ERROR: 获取头条热点数据失败"
+        return 1
+    fi
+    
+    # 检查返回的JSON是否有效
+    if echo "$response" | jq -e .code >/dev/null 2>&1; then
+        echo "$response"
+        return 0
+    else
+        log_message "ERROR: 头条热点返回数据不是有效的JSON格式"
+        return 1
+    fi
+}
+
+# 获取知乎热点数据
+fetch_zhihu_hot() {
+    local response
+    response=$(curl -s -m 30 "http://192.168.3.133:4399/v2/zhihu")
+    if [ $? -ne 0 ]; then
+        log_message "ERROR: 获取知乎热点数据失败"
+        return 1
+    fi
+    
+    # 检查返回的JSON是否有效
+    if echo "$response" | jq -e .code >/dev/null 2>&1; then
+        echo "$response"
+        return 0
+    else
+        log_message "ERROR: 知乎热点返回数据不是有效的JSON格式"
+        return 1
+    fi
+}
+
+# 格式化60秒新闻消息
+format_60s_news() {
+    local json_data="$1"
+    
+    # 检查返回码
+    local code
+    code=$(echo "$json_data" | jq -r '.code')
+    if [ "$code" != "200" ]; then
+        log_message "ERROR: 60秒新闻API返回错误码: $code"
+        return 1
+    fi
+    
+    # 提取数据
+    local date_str
+    local day_of_week
+    local lunar_date
+    local tip
+    local news_list_json
+    local link
+    date_str=$(echo "$json_data" | jq -r '.data.date')
+    day_of_week=$(echo "$json_data" | jq -r '.data.day_of_week')
+    lunar_date=$(echo "$json_data" | jq -r '.data.lunar_date')
+    tip=$(echo "$json_data" | jq -r '.data.tip')
+    news_list_json=$(echo "$json_data" | jq '.data.news')
+    link=$(echo "$json_data" | jq -r '.data.link')
+    
+    # 构建标题
+    local message
+    message="【每日新闻】$date_str $day_of_week $lunar_date\n"
+    message+=$(printf '=%.0s' {1..50})"\n\n"
+    
+    # 添加每日一言
+    if [ -n "$tip" ] && [ "$tip" != "null" ]; then
+        message="${message}💡 $tip\n\n"
+    fi
+    
+    # 获取新闻列表并添加到消息
+    local news_count
+    news_count=$(echo "$news_list_json" | jq 'length')
+    for i in $(seq 0 $((news_count - 1))); do
+        local news_item
+        news_item=$(echo "$news_list_json" | jq -r ".[$i]")
+        if [ -n "$news_item" ] && [ "$news_item" != "null" ]; then
+            message="${message}$((i + 1)). $news_item\n\n"
+        fi
+    done
+    
+    # 添加链接
+    if [ -n "$link" ] && [ "$link" != "null" ]; then
+        message="${message}🔗 阅读原文: $link\n\n"
+    fi
+    
+    echo -e "$message"
+}
+
+# 格式化热点新闻消息
+format_hot_news() {
+    local json_data="$1"
+    local source_name="$2"
+    
+    # 检查返回码
+    local code
+    code=$(echo "$json_data" | jq -r '.code')
+    if [ "$code" != "200" ]; then
+        log_message "ERROR: $source_name API返回错误码: $code"
+        return 1
+    fi
+    
+    # 提取数据
+    local hot_list_json
+    hot_list_json=$(echo "$json_data" | jq '.data')
+    
+    # 构建标题
+    local message
+    message="【$source_name 热点】\n"
+    message+=$(printf '=%.0s' {1..50})"\n\n"
+    
+    # 获取热点列表并添加到消息
+    local hot_count
+    hot_count=$(echo "$hot_list_json" | jq 'length')
+    for i in $(seq 0 $((hot_count - 1))); do
+        local hot_item
+        local hot_title
+        local hot_url
+        hot_item=$(echo "$hot_list_json" | jq ".[$i]")
+        hot_title=$(echo "$hot_item" | jq -r '.title // .keyword // .title // .name // .query')
+        hot_url=$(echo "$hot_item" | jq -r '.url // .link // .hotUrl // .article_url // "N/A"')
+        
+        if [ -n "$hot_title" ] && [ "$hot_title" != "null" ]; then
+            message="${message}$((i + 1)). $hot_title\n"
+            if [ -n "$hot_url" ] && [ "$hot_url" != "N/A" ] && [ "$hot_url" != "null" ]; then
+                message="${message}   🔗 $hot_url\n"
+            fi
+            message="${message}\n"
+        fi
+    done
+    
+    echo -e "$message"
+}
+
+# 组合所有消息
+combine_messages() {
+    local msg_60s="$1"
+    local msg_baidu="$2"
+    local msg_toutiao="$3"
+    local msg_zhihu="$4"
+    
+    local combined_message=""
+    
+    # 添加60秒新闻
+    if [ -n "$msg_60s" ]; then
+        combined_message+="$msg_60s\n"
+    fi
+    
+    # 添加百度热点
+    if [ -n "$msg_baidu" ]; then
+        combined_message+="$msg_baidu\n"
+    fi
+    
+    # 添加头条热点
+    if [ -n "$msg_toutiao" ]; then
+        combined_message+="$msg_toutiao\n"
+    fi
+    
+    # 添加知乎热点
+    if [ -n "$msg_zhihu" ]; then
+        combined_message+="$msg_zhihu\n"
+    fi
+    
+    # 添加底部信息
+    combined_message+=$(printf '=%.0s' {1..50})"\n"
+    combined_message+="来源: https://github.com/vikiboss/60s\n"
+    
+    echo -e "$combined_message"
+}
+
+# 发送消息到飞书
+send_to_feishu() {
+    local message="$1"
+    
+    # 构建JSON载荷
+    local payload
+    payload=$(printf '{
+  "msg_type": "text",
+  "content": {
+    "text": "%s"
+  }
+}' "$(echo "$message" | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')")
+
+    # 发送请求
+    local response
+    response=$(curl -s -X POST \
+        -H "Content-Type: application/json" \
+        -d "$payload" \
+        --connect-timeout 10 \
+        --max-time 30 \
+        "$FEISHU_WEBHOOK_URL")
+    
+    if [ $? -eq 0 ]; then
+        # 检查响应状态，根据实际API响应调整
+        local status_code
+        status_code=$(echo "$response" | jq -r '.StatusCode // .code // .status // .error_code // "unknown"')
+        if [ "$status_code" = "0" ] || [ "$status_code" = "0" ] || [ "$status_code" = "success" ]; then
+            log_message "INFO: 消息发送成功"
+            return 0
+        else
+            log_message "ERROR: 飞书返回错误 - $(echo "$response" | jq -r '.msg // .message // .error_msg // "unknown error"')"
+            echo "$response" >> $LOG_FILE
+            return 1
+        fi
+    else
+        log_message "ERROR: 发送请求失败，响应: $response"
+        return 1
+    fi
+}
+
+# 主执行函数
+main() {
+    log_message "INFO: 开始执行每日新闻推送任务"
+    
+    # 获取各种新闻数据
+    local news_60s=$(fetch_60s_news)
+    local news_baidu=$(fetch_baidu_hot)
+    local news_toutiao=$(fetch_toutiao_hot)
+    local news_zhihu=$(fetch_zhihu_hot)
+    
+    # 格式化各个消息
+    local formatted_60s=""
+    local formatted_baidu=""
+    local formatted_toutiao=""
+    local formatted_zhihu=""
+    
+    if [ -n "$news_60s" ]; then
+        formatted_60s=$(format_60s_news "$news_60s")
+    fi
+    
+    if [ -n "$news_baidu" ]; then
+        formatted_baidu=$(format_hot_news "$news_baidu" "百度")
+    fi
+    
+    if [ -n "$news_toutiao" ]; then
+        formatted_toutiao=$(format_hot_news "$news_toutiao" "头条")
+    fi
+    
+    if [ -n "$news_zhihu" ]; then
+        formatted_zhihu=$(format_hot_news "$news_zhihu" "知乎")
+    fi
+    
+    # 组合所有消息
+    local combined_message=$(combine_messages "$formatted_60s" "$formatted_baidu" "$formatted_toutiao" "$formatted_zhihu")
+    
+    # 发送消息到飞书
+    send_to_feishu "$combined_message"
+    if [ $? -eq 0 ]; then
+        log_message "INFO: 每日新闻推送完成"
+    else
+        log_message "ERROR: 每日新闻推送失败"
+    fi
+}
+
+# 执行主函数
+main
+EOF
+
+# 创建管理脚本
+cat > /home/60s/manage.sh << 'EOF'
+#!/bin/bash
+
+CONFIG_PATH="/home/60s/config.conf"
+SCRIPT_PATH="/home/60s/news_pusher.sh"
+LOG_FILE="/home/60s/daily_news_push.log"
+CRON_BACKUP="/home/60s/cron_backup.txt"
+
+# 显示菜单
+show_menu() {
+    echo ""
+    echo "=== 60秒新闻推送管理 ==="
+    echo "1. 立即推送（多源新闻+链接）"
+    echo "2. 设置定时推送时间（清空原有任务，支持批量）"
+    echo "3. 添加定时推送时间（保留原有任务，支持批量）"
+    echo "4. 查看当前定时任务"
+    echo "5. 删除定时任务"
+    echo "6. 清空所有定时任务"
+    echo "7. 查看日志"
+    echo "8. 测试API连接"
+    echo "9. 退出"
+    echo "========================"
+    echo -n "请选择操作 (1-9): "
+}
+
+# 立即推送
+immediate_push() {
+    echo "正在执行立即推送..."
+    $SCRIPT_PATH
+    echo "立即推送完成，查看最新日志："
+    tail -n 20 $LOG_FILE
+}
+
+# 设置定时推送时间（清空原有任务，支持批量）
+set_schedule() {
+    echo "当前定时任务："
+    crontab -l 2>/dev/null | grep "news_pusher.sh" || echo "无定时任务"
+    echo ""
+    
+    # 清空现有任务
+    crontab -l 2>/dev/null | grep -v "news_pusher.sh" | crontab -
+    echo "已清空原有定时任务"
+    
+    echo "请输入推送时间（格式：HH:MM,HH:MM,HH:MM，例如 09:00,10:00,12:00）："
+    read -p "时间: " time_input
+    
+    # 按逗号分割时间
+    IFS=',' read -ra times <<< "$time_input"
+    
+    for time_str in "${times[@]}"; do
+        # 去除空格
+        time_str=$(echo "$time_str" | xargs)
+        
+        # 验证时间格式
+        if [[ ! $time_str =~ ^[0-2][0-9]:[0-5][0-9]$ ]]; then
+            echo "错误：时间格式不正确 '$time_str'，请使用 HH:MM 格式（例如 09:00）"
+            continue
+        fi
+        
+        # 分割小时和分钟
+        IFS=':' read -r hour minute <<< "$time_str"
+        
+        # 验证小时和分钟范围
+        if [ $hour -lt 0 ] || [ $hour -gt 23 ] || [ $minute -lt 0 ] || [ $minute -gt 59 ]; then
+            echo "错误：时间超出范围 '$time_str'（小时: 0-23，分钟: 0-59）"
+            continue
+        fi
+        
+        # 检查是否已存在相同的定时任务
+        if crontab -l 2>/dev/null | grep -q "$minute $hour \* \* \* $SCRIPT_PATH"; then
+            echo "警告：定时任务 $hour:$minute 已存在"
+            continue
+        fi
+        
+        # 添加新的定时任务
+        (crontab -l 2>/dev/null; echo "$minute $hour * * * $SCRIPT_PATH") | crontab -
+        echo "定时任务已添加：每天 $hour:$minute 执行"
+    done
+    
+    echo "当前定时任务："
+    crontab -l 2>/dev/null | grep "news_pusher.sh" || echo "无定时任务"
+}
+
+# 添加定时推送时间（保留原有任务，支持批量）
+add_schedule() {
+    echo "当前定时任务："
+    crontab -l 2>/dev/null | grep "news_pusher.sh" || echo "无定时任务"
+    echo ""
+    
+    echo "请输入推送时间（格式：HH:MM,HH:MM,HH:MM，例如 09:00,10:00,12:00）："
+    read -p "时间: " time_input
+    
+    # 按逗号分割时间
+    IFS=',' read -ra times <<< "$time_input"
+    
+    for time_str in "${times[@]}"; do
+        # 去除空格
+        time_str=$(echo "$time_str" | xargs)
+        
+        # 验证时间格式
+        if [[ ! $time_str =~ ^[0-2][0-9]:[0-5][0-9]$ ]]; then
+            echo "错误：时间格式不正确 '$time_str'，请使用 HH:MM 格式（例如 09:00）"
+            continue
+        fi
+        
+        # 分割小时和分钟
+        IFS=':' read -r hour minute <<< "$time_str"
+        
+        # 验证小时和分钟范围
+        if [ $hour -lt 0 ] || [ $hour -gt 23 ] || [ $minute -lt 0 ] || [ $minute -gt 59 ]; then
+            echo "错误：时间超出范围 '$time_str'（小时: 0-23，分钟: 0-59）"
+            continue
+        fi
+        
+        # 检查是否已存在相同的定时任务
+        if crontab -l 2>/dev/null | grep -q "$minute $hour \* \* \* $SCRIPT_PATH"; then
+            echo "警告：定时任务 $hour:$minute 已存在"
+            continue
+        fi
+        
+        # 添加新的定时任务
+        (crontab -l 2>/dev/null; echo "$minute $hour * * * $SCRIPT_PATH") | crontab -
+        echo "定时任务已添加：每天 $hour:$minute 执行"
+    done
+    
+    echo "当前定时任务："
+    crontab -l 2>/dev/null | grep "news_pusher.sh" || echo "无定时任务"
+}
+
+# 查看当前定时任务
+view_schedule() {
+    echo "当前定时任务："
+    crontab -l 2>/dev/null | grep "news_pusher.sh" || echo "无定时任务"
+}
+
+# 删除定时任务
+remove_schedule() {
+    echo "当前定时任务："
+    local current_tasks
+    current_tasks=$(crontab -l 2>/dev/null | grep "news_pusher.sh")
+    
+    if [ -z "$current_tasks" ]; then
+        echo "无定时任务"
+        return
+    fi
+    
+    echo "$current_tasks"
+    echo ""
+    echo "请输入要删除的定时任务时间（格式：HH:MM，例如 09:00）："
+    read -p "时间: " time_input
+    
+    # 验证时间格式
+    if [[ ! $time_input =~ ^[0-2][0-9]:[0-5][0-9]$ ]]; then
+        echo "错误：时间格式不正确，请使用 HH:MM 格式（例如 09:00）"
+        return 1
+    fi
+    
+    # 分割小时和分钟
+    IFS=':' read -r hour minute <<< "$time_input"
+    
+    # 验证小时和分钟范围
+    if [ $hour -lt 0 ] || [ $hour -gt 23 ] || [ $minute -lt 0 ] || [ $minute -gt 59 ]; then
+        echo "错误：时间超出范围（小时: 0-23，分钟: 0-59）"
+        return 1
+    fi
+    
+    # 检查是否存在该定时任务
+    if ! crontab -l 2>/dev/null | grep -q "$minute $hour \* \* \* $SCRIPT_PATH"; then
+        echo "错误：未找到定时任务 $hour:$minute"
+        return 1
+    fi
+    
+    # 确认删除
+    read -p "确定要删除定时任务 $hour:$minute 吗？(y/N): " confirm
+    if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ] || [ "$confirm" = "yes" ] || [ "$confirm" = "YES" ]; then
+        # 删除匹配的定时任务
+        crontab -l 2>/dev/null | grep -v "$minute $hour \* \* \* $SCRIPT_PATH" | crontab -
+        echo "定时任务 $hour:$minute 已删除"
+    else
+        echo "操作已取消"
+    fi
+}
+
+# 清空所有定时任务
+clear_all_schedules() {
+    echo "当前定时任务："
+    crontab -l 2>/dev/null | grep "news_pusher.sh" || echo "无定时任务"
+    
+    if crontab -l 2>/dev/null | grep -q "news_pusher.sh"; then
+        read -p "确定要清空所有定时任务吗？(y/N): " confirm
+        if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ] || [ "$confirm" = "yes" ] || [ "$confirm" = "YES" ]; then
+            crontab -l 2>/dev/null | grep -v "news_pusher.sh" | crontab -
+            echo "所有定时任务已清空"
+        else
+            echo "操作已取消"
+        fi
+    else
+        echo "没有定时任务需要清空"
+    fi
+}
+
+# 查看日志
+view_logs() {
+    echo "最近20条日志："
+    tail -n 20 $LOG_FILE
+    echo ""
+    read -p "是否查看完整日志？(y/N): " confirm
+    if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ] || [ "$confirm" = "yes" ] || [ "$confirm" = "YES" ]; then
+        less $LOG_FILE
+    fi
+}
+
+# 测试API连接
+test_apis() {
+    echo "测试API连接..."
+    echo ""
+    
+    echo "测试60秒新闻API: http://192.168.3.133:4399/v2/60s"
+    curl -s -m 10 "http://192.168.3.133:4399/v2/60s" | jq -r '.code' 2>/dev/null
+    if [ $? -eq 0 ]; then
+        echo "✓ 60秒新闻API连接正常"
+    else
+        echo "✗ 60秒新闻API连接失败"
+    fi
+    echo ""
+    
+    echo "测试百度热点API: http://192.168.3.133:4399/v2/baidu/hot"
+    curl -s -m 10 "http://192.168.3.133:4399/v2/baidu/hot" | jq -r '.code' 2>/dev/null
+    if [ $? -eq 0 ]; then
+        echo "✓ 百度热点API连接正常"
+    else
+        echo "✗ 百度热点API连接失败"
+    fi
+    echo ""
+    
+    echo "测试头条热点API: http://192.168.3.133:4399/v2/toutiao"
+    curl -s -m 10 "http://192.168.3.133:4399/v2/toutiao" | jq -r '.code' 2>/dev/null
+    if [ $? -eq 0 ]; then
+        echo "✓ 头条热点API连接正常"
+    else
+        echo "✗ 头条热点API连接失败"
+    fi
+    echo ""
+    
+    echo "测试知乎热点API: http://192.168.3.133:4399/v2/zhihu"
+    curl -s -m 10 "http://192.168.3.133:4399/v2/zhihu" | jq -r '.code' 2>/dev/null
+    if [ $? -eq 0 ]; then
+        echo "✓ 知乎热点API连接正常"
+    else
+        echo "✗ 知乎热点API连接失败"
+    fi
+    echo ""
+}
+
+# 主循环
+while true; do
+    show_menu
+    read choice
+    
+    case $choice in
+        1)
+            immediate_push
+            ;;
+        2)
+            set_schedule
+            ;;
+        3)
+            add_schedule
+            ;;
+        4)
+            view_schedule
+            ;;
+        5)
+            remove_schedule
+            ;;
+        6)
+            clear_all_schedules
+            ;;
+        7)
+            view_logs
+            ;;
+        8)
+            test_apis
+            ;;
+        9)
+            echo "退出管理脚本"
+            exit 0
+            ;;
+        *)
+            echo "无效选项，请重新选择"
+            ;;
+    esac
+    
+    echo ""
+    echo "按任意键继续..."
+    read -n 1 -s
+done
+EOF
+
+# 创建日志清理脚本
+cat > /home/60s/cleanup_logs.sh << 'EOF'
+#!/bin/bash
+# 清理超过7天的日志文件
+find /home/60s -name "daily_news_push.log" -type f -mtime +7 -delete
+EOF
+
+# 给脚本添加执行权限
+chmod +x /home/60s/news_pusher.sh
+chmod +x /home/60s/manage.sh
+chmod +x /home/60s/cleanup_logs.sh
+
+# 设置日志清理任务（每周日凌晨2点执行）
+(crontab -l 2>/dev/null; echo "0 2 * * 0 /home/60s/cleanup_logs.sh") | crontab -
+
+echo "完整的新闻推送系统已安装完成！"
+echo ""
+echo "系统功能："
+echo "1. 支持多API源：60秒新闻、百度热点、头条热点、知乎热点"
+echo "2. 新闻内容包含链接，方便点击阅读"
+echo "3. 支持批量设置定时推送时间（格式：HH:MM,HH:MM,HH:MM）"
+echo "4. 提供完整的管理界面"
+echo "5. 自动日志记录和清理"
+echo ""
+echo "使用方法："
+echo "cd /home/60s && ./manage.sh"
+echo ""
+echo "目录结构："
+ls -la /home/60s/
+
+
+

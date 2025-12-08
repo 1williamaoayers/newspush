@@ -94,9 +94,18 @@ if [[ "$USE_MIRROR" =~ ^[Yy]$ ]]; then
     else
         IMAGE_NAME="ghcr.nju.edu.cn/1williamaoayers/newspush:latest"
     fi
-    echo -e "${GREEN}已选择镜像：${IMAGE_NAME}${NC}"
 else
-    IMAGE_NAME="ghcr.io/1williamaoayers/newspush:latest"
+    # 默认使用原作者的官方镜像 (支持多架构，稳定可靠)
+    # 如果用户没有选择国内镜像，我们使用 Docker Hub 的官方镜像
+    # 也可以选择使用 ghcr.io/vikiboss/60s:latest
+    IMAGE_NAME="vikiboss/60s:latest"
+fi
+echo -e "${GREEN}已选择镜像：${IMAGE_NAME}${NC}"
+
+# 检查 Docker 是否安装
+if ! command -v docker &> /dev/null; then
+    echo -e "正在安装 Docker..."
+    curl -fsSL https://get.docker.com | bash
 fi
 
 # 交互式获取推送时间
@@ -274,6 +283,17 @@ while [ $ELAPSED -lt $TIMEOUT ]; do
         sleep 5 # 额外等待 5 秒确保端口完全就绪
         break
     fi
+    # 增加对原作者镜像成功启动日志的兼容 (如果不同)
+    if docker logs newspush-api 2>&1 | grep -q "Server running at"; then
+        echo -e "${GREEN}API 服务已启动！${NC}"
+        sleep 5
+        break
+    fi
+    # 再次增加兼容性：只要不报错退出，且过了 10 秒，我们就认为它可能好了
+    if [ $ELAPSED -gt 10 ] && docker ps | grep -q "newspush-api"; then
+         # 这里不 break，继续等待以确保更稳，但可以输出个提示
+         echo -n "."
+    fi
     sleep 1
     ELAPSED=$((ELAPSED+1))
 done
@@ -288,6 +308,9 @@ fi
 
 # 启动推送服务 (作为常驻容器，用于执行定时任务)
 # 使用 Sidecar 模式：共享 API 容器的网络栈，直接通过 localhost 访问，避免 DNS 问题
+# 这里我们使用一个极小的 alpine 镜像来运行我们的 nodejs 推送脚本
+# 因为原作者的镜像可能没有包含我们的推送脚本需要的环境，或者为了解耦
+# 我们使用 node:alpine 作为推送服务的镜像，挂载脚本运行
 echo -e "正在启动推送服务..."
 docker run -d \
     --name newspush-pusher \
@@ -297,7 +320,7 @@ docker run -d \
     -e FEISHU_WEBHOOK_URL="$FEISHU_WEBHOOK" \
     -e SOURCE_URL="http://127.0.0.1:4399" \
     --entrypoint tail \
-    "$IMAGE_NAME" \
+    node:20-alpine \
     -f /dev/null
 
 if [ $? -ne 0 ]; then

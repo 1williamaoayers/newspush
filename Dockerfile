@@ -4,8 +4,8 @@ FROM node:20-slim AS builder
 # 设置工作目录
 WORKDIR /app
 
-# 设置 node 环境变量为 development，确保安装 devDependencies (如 tsx)
-ENV NODE_ENV=development
+# 设置 node 环境变量为 production，确保不安装 devDependencies (特别是 wrangler/workerd，它不支持 ARMv7)
+ENV NODE_ENV=production
 
 # 复制项目依赖文件，包括 .npmrc
 COPY package.json pnpm-lock.yaml* .npmrc ./
@@ -13,8 +13,10 @@ COPY package.json pnpm-lock.yaml* .npmrc ./
 # 安装构建工具 (Debian 方式)
 RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 
-# 安装 pnpm 并安装依赖 (强制忽略 lockfile 版本检查以避免冲突)
-RUN npm install -g pnpm@9.15.4 && pnpm install --no-frozen-lockfile
+# 1. 使用 npm 安装生产依赖 (跳过 devDependencies，从而避开 workerd)
+# 2. 手动安装 tsx (它是运行时必须的，但在 devDependencies 中)
+# 3. 确保 .npmrc 生效以安装 @oak/oak
+RUN npm install --omit=dev && npm install tsx --save-exact --no-save
 
 # 复制项目代码
 COPY . .
@@ -29,8 +31,8 @@ LABEL description="⏰ 60s API，每天 60 秒读懂世界｜一系列 高质量
 # 设置工作目录
 WORKDIR /app
 
-# 设置环境变量 (保持 development 以支持 tsx)
-ENV NODE_ENV=development TZ=Asia/Shanghai
+# 设置环境变量 (保持 production)
+ENV NODE_ENV=production TZ=Asia/Shanghai
 
 # 安装 tzdata (Debian 方式)
 RUN apt-get update && apt-get install -y tzdata && rm -rf /var/lib/apt/lists/* && \

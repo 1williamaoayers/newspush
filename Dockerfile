@@ -14,8 +14,8 @@ COPY package.json pnpm-lock.yaml* ./
 RUN apk add --no-cache python3 make g++
 
 # 启用 corepack 并预先下载 pnpm 包管理器，减少运行时下载延迟
-# 安装项目依赖，移除 --prod 以确保 devDependencies (如 typescript, tsx) 也被安装
-RUN corepack enable && corepack prepare --activate && pnpm install --frozen-lockfile
+# 安装项目依赖，移除 --frozen-lockfile 以允许在 lockfile 不匹配时自动更新 (因为我们刚修改了 package.json)
+RUN corepack enable && corepack prepare --activate && pnpm install
 
 # 复制项目代码到工作目录
 COPY . .

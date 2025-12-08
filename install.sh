@@ -248,7 +248,8 @@ EOF
 echo -e "${BLUE}[4/5] 启动服务容器...${NC}"
 
 # 创建专用网络
-docker network create newspush-network 2>/dev/null || true
+# 移除 2>/dev/null 以便看到潜在错误
+docker network create newspush-network || true
 
 # 清理旧容器
 echo -e "正在清理旧容器..."
@@ -259,6 +260,7 @@ echo -e "正在启动 API 服务..."
 docker run -d \
     --name newspush-api \
     --network newspush-network \
+    -p 4399:4399 \
     --restart unless-stopped \
     "$IMAGE_NAME"
 
@@ -278,18 +280,22 @@ done
 
 if [ $ELAPSED -ge $TIMEOUT ]; then
     echo -e "${YELLOW}警告：服务启动尚未完成，但这可能是正常的（取决于机器性能）。${NC}"
-    echo -e "${YELLOW}如果后续测试失败，请尝试手动查看日志：docker logs newspush-api${NC}"
+    echo -e "${RED}=== 自动捕获 API 日志 (最后 50 行) ===${NC}"
+    docker logs --tail 50 newspush-api
+    echo -e "${RED}=======================================${NC}"
+    echo -e "${YELLOW}如果上方日志显示报错，请截图反馈。${NC}"
 fi
 
 # 启动推送服务 (作为常驻容器，用于执行定时任务)
+# 使用 Sidecar 模式：共享 API 容器的网络栈，直接通过 localhost 访问，避免 DNS 问题
 echo -e "正在启动推送服务..."
 docker run -d \
     --name newspush-pusher \
-    --network newspush-network \
+    --network container:newspush-api \
     --restart unless-stopped \
     -v "$INSTALL_DIR/scripts:/app/scripts" \
     -e FEISHU_WEBHOOK_URL="$FEISHU_WEBHOOK" \
-    -e SOURCE_URL="http://newspush-api:4399" \
+    -e SOURCE_URL="http://127.0.0.1:4399" \
     --entrypoint tail \
     "$IMAGE_NAME" \
     -f /dev/null

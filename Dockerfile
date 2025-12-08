@@ -14,8 +14,8 @@ COPY package.json pnpm-lock.yaml* ./
 RUN apk add --no-cache python3 make g++
 
 # 启用 corepack 并预先下载 pnpm 包管理器，减少运行时下载延迟
-# 安装项目依赖，使用 --frozen-lockfile 参数确保锁文件的准确性
-RUN corepack enable && corepack prepare --activate && pnpm install --prod --frozen-lockfile
+# 安装项目依赖，移除 --prod 以确保 devDependencies (如 typescript, tsx) 也被安装
+RUN corepack enable && corepack prepare --activate && pnpm install --frozen-lockfile
 
 # 复制项目代码到工作目录
 COPY . .
@@ -51,4 +51,4 @@ EXPOSE 4399
 #   CMD curl --silent --fail http://127.0.0.1:4399/health -H 'User-Agent: Docker Health Check' || exit 1
 
 # 运行应用
-CMD ["node", "--disable-warning=ExperimentalWarning", "node.ts"]
+CMD ["pnpm", "run", "start"]

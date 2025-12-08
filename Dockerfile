@@ -9,15 +9,14 @@ WORKDIR /app
 # 临时注释掉 production 环境变量，确保 install 安装 devDependencies
 ENV NODE_ENV=development
 
-# 复制项目依赖文件，这里优化了复制步骤，可以利用 Docker 缓存
-COPY package.json pnpm-lock.yaml* ./
+# 复制项目依赖文件，包括 .npmrc (重要：包含 jsr registry 配置)
+COPY package.json pnpm-lock.yaml* .npmrc ./
 
 # 适配 ARM32 (玩客云等): 安装构建工具以支持可能需要的本地编译
 RUN apk add --no-cache python3 make g++
 
-# 替换 corepack 方式，改用 npm 全局安装稳定版 pnpm
-# 并强制删除 pnpm-lock.yaml 以确保全新安装，彻底解决锁文件版本冲突问题
-RUN npm install -g pnpm@9.15.4 && rm -f pnpm-lock.yaml && pnpm install
+# 切换为 npm 安装，避免 pnpm 版本/锁文件问题，并确保 .npmrc 生效
+RUN npm install
 
 # 复制项目代码到工作目录
 COPY . .
@@ -55,4 +54,4 @@ EXPOSE 4399
 #   CMD curl --silent --fail http://127.0.0.1:4399/health -H 'User-Agent: Docker Health Check' || exit 1
 
 # 运行应用
-CMD ["pnpm", "run", "start"]
+CMD ["npm", "run", "start"]

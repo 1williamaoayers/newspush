@@ -150,11 +150,13 @@ function fetchJson(endpoint) {
                     resolve(json.code === 200 ? json.data : null);
                 } catch (e) {
                     console.error(`解析 ${endpoint} 失败`, e);
+                    console.error('原始数据:', data); // 打印原始数据以便调试
                     resolve(null);
                 }
             });
         }).on('error', (e) => {
-            console.error(`请求 ${endpoint} 失败`, e);
+            console.error(`请求 ${endpoint} 失败`, e.message);
+            console.error(`完整地址: ${API_URL}${endpoint}`); // 打印完整地址
             resolve(null);
         });
     });
@@ -259,6 +261,25 @@ docker run -d \
     --network newspush-network \
     --restart unless-stopped \
     "$IMAGE_NAME"
+
+# 等待服务就绪
+echo -e "等待服务就绪..."
+TIMEOUT=60
+ELAPSED=0
+while [ $ELAPSED -lt $TIMEOUT ]; do
+    if docker logs newspush-api 2>&1 | grep -q "service is running"; then
+        echo -e "${GREEN}API 服务已启动！${NC}"
+        sleep 5 # 额外等待 5 秒确保端口完全就绪
+        break
+    fi
+    sleep 1
+    ELAPSED=$((ELAPSED+1))
+done
+
+if [ $ELAPSED -ge $TIMEOUT ]; then
+    echo -e "${YELLOW}警告：服务启动尚未完成，但这可能是正常的（取决于机器性能）。${NC}"
+    echo -e "${YELLOW}如果后续测试失败，请尝试手动查看日志：docker logs newspush-api${NC}"
+fi
 
 # 启动推送服务 (作为常驻容器，用于执行定时任务)
 echo -e "正在启动推送服务..."

@@ -68,39 +68,19 @@ echo -e "${GREEN}将在 ${INSTALL_DIR} 部署服务${NC}"
 
 # 交互式选择是否使用国内镜像加速
 echo ""
-echo -e "由于 GitHub 容器服务 (GHCR) 在国内访问可能较慢，建议开启镜像加速。"
+echo -e "由于 Docker Hub 在国内访问可能较慢，建议开启镜像加速。"
 read -p "是否在中国大陆使用？(y/n) (默认: n): " USE_MIRROR
 
 if [[ "$USE_MIRROR" =~ ^[Yy]$ ]]; then
-    echo ""
-    echo -e "请选择加速源："
-    echo -e "1. 南京大学 (ghcr.nju.edu.cn) - ${GREEN}推荐，公网可用${NC}"
-    echo -e "2. 自定义 (手动输入其他镜像地址)"
-    read -p "请输入选项 [1-2] (默认: 1): " MIRROR_CHOICE
-    
-    if [ "$MIRROR_CHOICE" == "2" ]; then
-        echo -e "${YELLOW}提示：请输入完整的镜像地址（包含 Registry 域名、镜像名和标签）${NC}"
-        echo -e "示例 1 (DockerProxy): ghcr.dockerproxy.com/1williamaoayers/newspush:latest"
-        echo -e "示例 2 (DaoCloud): ghcr.daocloud.io/1williamaoayers/newspush:latest"
-        echo -e "示例 3 (私有仓库): registry.example.com/my-repo/newspush:latest"
-        echo ""
-        read -p "请输入完整镜像地址: " CUSTOM_IMAGE
-        if [ -n "$CUSTOM_IMAGE" ]; then
-            IMAGE_NAME="$CUSTOM_IMAGE"
-        else
-            echo -e "${YELLOW}未输入地址，将使用南京大学镜像${NC}"
-            IMAGE_NAME="ghcr.nju.edu.cn/1williamaoayers/newspush:latest"
-        fi
-    else
-        IMAGE_NAME="ghcr.nju.edu.cn/1williamaoayers/newspush:latest"
-    fi
+    # 使用 DaoCloud 或其他公共镜像加速 Docker Hub 的官方镜像
+    # 这里不再使用我自己的 GHCR 镜像，以免出现构建版本不一致的问题
+    IMAGE_NAME="docker.m.daocloud.io/vikiboss/60s:latest"
+    echo -e "${GREEN}已选择加速镜像：${IMAGE_NAME}${NC}"
 else
     # 默认使用原作者的官方镜像 (支持多架构，稳定可靠)
-    # 如果用户没有选择国内镜像，我们使用 Docker Hub 的官方镜像
-    # 也可以选择使用 ghcr.io/vikiboss/60s:latest
     IMAGE_NAME="vikiboss/60s:latest"
+    echo -e "${GREEN}已选择官方镜像：${IMAGE_NAME}${NC}"
 fi
-echo -e "${GREEN}已选择镜像：${IMAGE_NAME}${NC}"
 
 # 检查 Docker 是否安装
 if ! command -v docker &> /dev/null; then
@@ -266,6 +246,8 @@ docker rm -f newspush-api newspush-pusher 2>/dev/null || true
 
 # 启动 API 服务
 echo -e "正在启动 API 服务..."
+# 强制拉取最新镜像，防止本地缓存了错误的旧镜像
+docker pull "$IMAGE_NAME"
 docker run -d \
     --name newspush-api \
     --network newspush-network \
@@ -311,6 +293,14 @@ fi
 # 这里我们使用一个极小的 alpine 镜像来运行我们的 nodejs 推送脚本
 # 因为原作者的镜像可能没有包含我们的推送脚本需要的环境，或者为了解耦
 # 我们使用 node:alpine 作为推送服务的镜像，挂载脚本运行
+# 尝试预拉取 node 镜像，失败则重试
+echo -e "正在准备推送服务镜像..."
+if ! docker pull node:20-alpine; then
+    echo -e "${YELLOW}从 Docker Hub 拉取 node:20-alpine 失败，尝试使用 DaoCloud 加速...${NC}"
+    docker pull docker.m.daocloud.io/library/node:20-alpine
+    docker tag docker.m.daocloud.io/library/node:20-alpine node:20-alpine
+fi
+
 echo -e "正在启动推送服务..."
 docker run -d \
     --name newspush-pusher \

@@ -72,9 +72,8 @@ echo -e "由于 Docker Hub 在国内访问可能较慢，建议开启镜像加�
 read -p "是否在中国大陆使用？(y/n) (默认: n): " USE_MIRROR
 
 if [[ "$USE_MIRROR" =~ ^[Yy]$ ]]; then
-    # 使用 DaoCloud 或其他公共镜像加速 Docker Hub 的官方镜像
-    # 这里不再使用我自己的 GHCR 镜像，以免出现构建版本不一致的问题
-    IMAGE_NAME="docker.m.daocloud.io/vikiboss/60s:latest"
+    # 使用 1Panel 的公共镜像加速 Docker Hub 的官方镜像 (DaoCloud 有白名单限制，不再使用)
+    IMAGE_NAME="docker.1panel.live/vikiboss/60s:latest"
     echo -e "${GREEN}已选择加速镜像：${IMAGE_NAME}${NC}"
 else
     # 默认使用原作者的官方镜像 (支持多架构，稳定可靠)
@@ -247,7 +246,15 @@ docker rm -f newspush-api newspush-pusher 2>/dev/null || true
 # 启动 API 服务
 echo -e "正在启动 API 服务..."
 # 强制拉取最新镜像，防止本地缓存了错误的旧镜像
-docker pull "$IMAGE_NAME"
+if ! docker pull "$IMAGE_NAME"; then
+    echo -e "${YELLOW}镜像 $IMAGE_NAME 拉取失败，尝试切换回官方源 (vikiboss/60s:latest)...${NC}"
+    IMAGE_NAME="vikiboss/60s:latest"
+    if ! docker pull "$IMAGE_NAME"; then
+         echo -e "${RED}错误：无法拉取 API 镜像，请检查网络连接。${NC}"
+         exit 1
+    fi
+fi
+
 docker run -d \
     --name newspush-api \
     --network newspush-network \
@@ -296,9 +303,9 @@ fi
 # 尝试预拉取 node 镜像，失败则重试
 echo -e "正在准备推送服务镜像..."
 if ! docker pull node:20-alpine; then
-    echo -e "${YELLOW}从 Docker Hub 拉取 node:20-alpine 失败，尝试使用 DaoCloud 加速...${NC}"
-    docker pull docker.m.daocloud.io/library/node:20-alpine
-    docker tag docker.m.daocloud.io/library/node:20-alpine node:20-alpine
+    echo -e "${YELLOW}从 Docker Hub 拉取 node:20-alpine 失败，尝试使用 1Panel 加速...${NC}"
+    docker pull docker.1panel.live/library/node:20-alpine
+    docker tag docker.1panel.live/library/node:20-alpine node:20-alpine
 fi
 
 echo -e "正在启动推送服务..."

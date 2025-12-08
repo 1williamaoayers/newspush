@@ -13,10 +13,10 @@ COPY package.json pnpm-lock.yaml* .npmrc ./
 # 安装构建工具 (Debian 方式)
 RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 
-# 1. 使用 npm 安装生产依赖 (跳过 devDependencies，从而避开 workerd)
-# 2. 手动安装 tsx (它是运行时必须的，但在 devDependencies 中)
-# 3. 确保 .npmrc 生效以安装 @oak/oak
-RUN npm install --omit=dev && npm install tsx --save-exact --no-save
+# 安装生产依赖
+# tsx 已在 dependencies 中,会自动安装
+# 使用 --omit=dev 跳过 devDependencies (避免安装 workerd 等不支持 ARM32 的包)
+RUN npm install --omit=dev
 
 # 复制项目代码
 COPY . .

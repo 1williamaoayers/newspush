@@ -69,3 +69,15 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Test ARM32 Image
+        run: |
+          echo "Testing ARM32 image..."
+          docker run --rm --platform linux/arm/v7 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            node --version
+          docker run --rm --platform linux/arm/v7 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            ls -la /app/node_modules/tsx
+          echo "✓ ARM32 image test passed"
+

@@ -15,9 +15,9 @@ COPY package.json pnpm-lock.yaml* ./
 # 适配 ARM32 (玩客云等): 安装构建工具以支持可能需要的本地编译
 RUN apk add --no-cache python3 make g++
 
-# 启用 corepack 并预先下载 pnpm 包管理器，减少运行时下载延迟
-# 安装项目依赖，移除 --frozen-lockfile 以允许在 lockfile 不匹配时自动更新 (因为我们刚修改了 package.json)
-RUN corepack enable && corepack prepare --activate && pnpm install
+# 替换 corepack 方式，改用 npm 全局安装稳定版 pnpm
+# 并强制删除 pnpm-lock.yaml 以确保全新安装，彻底解决锁文件版本冲突问题
+RUN npm install -g pnpm@9.15.4 && rm -f pnpm-lock.yaml && pnpm install
 
 # 复制项目代码到工作目录
 COPY . .

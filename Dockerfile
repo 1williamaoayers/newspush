@@ -48,4 +48,4 @@ USER nodejs
 EXPOSE 4399
 
 # 运行应用
-CMD ["pnpm", "run", "start"]
+CMD ["npm", "run", "start"]

@@ -72,8 +72,9 @@ echo -e "由于 Docker Hub 在国内访问可能较慢，建议开启镜像加�
 read -p "是否在中国大陆使用？(y/n) (默认: n): " USE_MIRROR
 
 if [[ "$USE_MIRROR" =~ ^[Yy]$ ]]; then
-    # 使用 1Panel 的公共镜像加速 Docker Hub 的官方镜像 (DaoCloud 有白名单限制，不再使用)
-    IMAGE_NAME="docker.1panel.live/vikiboss/60s:latest"
+    # 使用用户指定的加速地址 pull.aitgo.netlib.re
+    # 假设该地址支持 Docker Registry 代理
+    IMAGE_NAME="pull.aitgo.netlib.re/vikiboss/60s:latest"
     echo -e "${GREEN}已选择加速镜像：${IMAGE_NAME}${NC}"
 else
     # 默认使用原作者的官方镜像 (支持多架构，稳定可靠)
@@ -303,9 +304,9 @@ fi
 # 尝试预拉取 node 镜像，失败则重试
 echo -e "正在准备推送服务镜像..."
 if ! docker pull node:20-alpine; then
-    echo -e "${YELLOW}从 Docker Hub 拉取 node:20-alpine 失败，尝试使用 1Panel 加速...${NC}"
-    docker pull docker.1panel.live/library/node:20-alpine
-    docker tag docker.1panel.live/library/node:20-alpine node:20-alpine
+    echo -e "${YELLOW}从 Docker Hub 拉取 node:20-alpine 失败，尝试使用加速源...${NC}"
+    docker pull pull.aitgo.netlib.re/library/node:20-alpine
+    docker tag pull.aitgo.netlib.re/library/node:20-alpine node:20-alpine
 fi
 
 echo -e "正在启动推送服务..."

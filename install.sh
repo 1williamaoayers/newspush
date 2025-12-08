@@ -74,11 +74,11 @@ read -p "是否在中国大陆使用？(y/n) (默认: n): " USE_MIRROR
 if [[ "$USE_MIRROR" =~ ^[Yy]$ ]]; then
     # 使用用户指定的加速地址 pull.aitgo.netlib.re
     # 假设该地址支持 Docker Registry 代理
-    IMAGE_NAME="pull.aitgo.netlib.re/vikiboss/60s:latest"
+    IMAGE_NAME="pull.aitgo.netlib.re/vikiboss/60s:1.1.18"
     echo -e "${GREEN}已选择加速镜像：${IMAGE_NAME}${NC}"
 else
     # 默认使用原作者的官方镜像 (支持多架构，稳定可靠)
-    IMAGE_NAME="vikiboss/60s:latest"
+    IMAGE_NAME="vikiboss/60s:1.1.18"
     echo -e "${GREEN}已选择官方镜像：${IMAGE_NAME}${NC}"
 fi
 
@@ -248,8 +248,8 @@ docker rm -f newspush-api newspush-pusher 2>/dev/null || true
 echo -e "正在启动 API 服务..."
 # 强制拉取最新镜像，防止本地缓存了错误的旧镜像
 if ! docker pull "$IMAGE_NAME"; then
-    echo -e "${YELLOW}镜像 $IMAGE_NAME 拉取失败，尝试切换回官方源 (vikiboss/60s:latest)...${NC}"
-    IMAGE_NAME="vikiboss/60s:latest"
+    echo -e "${YELLOW}镜像 $IMAGE_NAME 拉取失败，尝试切换回官方源 (vikiboss/60s:1.1.18)...${NC}"
+    IMAGE_NAME="vikiboss/60s:1.1.18"
     if ! docker pull "$IMAGE_NAME"; then
          echo -e "${RED}错误：无法拉取 API 镜像，请检查网络连接。${NC}"
          exit 1

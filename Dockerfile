@@ -5,7 +5,9 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # 设置 node 环境变量为生产环境，不会安装 devDependencies
-ENV NODE_ENV=production
+# ENV NODE_ENV=production
+# 临时注释掉 production 环境变量，确保 install 安装 devDependencies
+ENV NODE_ENV=development
 
 # 复制项目依赖文件，这里优化了复制步骤，可以利用 Docker 缓存
 COPY package.json pnpm-lock.yaml* ./
@@ -31,7 +33,9 @@ LABEL description="⏰ 60s API，每天 60 秒读懂世界｜一系列 高质量
 WORKDIR /app
 
 # 设置 node 环境变量为生产环境，更高效地运行应用，设置时区为上海
-ENV NODE_ENV=production TZ=Asia/Shanghai
+# 注意：这里不能设为 production，否则 pnpm start 可能会因为找不到 devDependencies (tsx) 而失败
+# 或者我们需要显式告诉 pnpm 忽略 NODE_ENV
+ENV NODE_ENV=development TZ=Asia/Shanghai
 
 # 安装 tzdata 以支持时区设置，创建非 root 用户
 RUN apk add --no-cache tzdata && \
